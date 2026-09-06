@@ -1,5 +1,0 @@
-Pillow
-numpy
-qrcode
-pypdf
-openpyxl
