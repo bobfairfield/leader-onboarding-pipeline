@@ -1,0 +1,9 @@
+{
+  "name": "Sample Leader",
+  "email": "sample@example.com",
+  "phone": "555-987-6543",
+  "shaklee_storefront_handle": "sampleleader",
+  "color_scheme": "sage_forest",
+  "photo_path": "/home/claude/pipeline/card-template/Leader-Card-Template/sample_photo.jpg",
+  "bio": "I started because my knees hurt and nothing else was working."
+}
