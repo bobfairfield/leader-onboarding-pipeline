@@ -1,2 +1,14 @@
+[project]
+name = "leader-onboarding-pipeline"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "Pillow",
+    "numpy",
+    "qrcode",
+    "pypdf",
+    "openpyxl",
+]
+
 [tool.vercel]
 entrypoint = "api.onboard:handler"
