@@ -22,7 +22,7 @@ WINE = (79, 16, 38)      # 4F1026 - BFL primary dark wine
 FOREST = (44, 71, 54)    # 2C4736 - BFL sage/forest
 
 def _font_path(filename):
-    bundled = os.path.join(SCRIPT_DIR, "..", "..", "fonts", filename)
+    bundled = os.path.join(SCRIPT_DIR, "..", "fonts", filename)
     if os.path.exists(bundled):
         return bundled
     bundled_local = os.path.join(SCRIPT_DIR, "fonts", filename)
