@@ -36,6 +36,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "landing-templa
 
 from onboard_leader import onboard, slugify  # noqa: E402
 from qa_check import run_qa  # noqa: E402
+from ai_review import run_ai_review  # noqa: E402
 from github_push import push_leader_site  # noqa: E402
 
 PIPELINE_ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -104,21 +105,42 @@ def process_onboarding(payload):
         leader["repo_slug"] = slugify(leader["name"])
 
         onboard(leader, PIPELINE_ROOT, out_dir)
+
+        # Checker 1: deterministic structural checks (pages present, fields
+        # personalized, files well-formed).
         qa_report = run_qa(leader, out_dir)
 
-        live_url = push_leader_site(
-            leader, out_dir,
-            owner=os.environ["GITHUB_OWNER"],
-            token=os.environ["GITHUB_TOKEN"],
-        )
+        # Checker 2: an independent AI pass that actually looks at the card
+        # image and reads the generated copy - catches what a script can't.
+        ai_report = run_ai_review(leader, out_dir)
+
+        both_passed = qa_report["overall"] == "PASS" and ai_report["overall"] == "PASS"
+
+        live_url = None
+        if both_passed:
+            # Only push the site live and only let the caller send the
+            # welcome email if BOTH checkers signed off. A failure on either
+            # one holds the whole kit back for manual review rather than
+            # shipping something unverified.
+            live_url = push_leader_site(
+                leader, out_dir,
+                owner=os.environ["GITHUB_OWNER"],
+                token=os.environ["GITHUB_TOKEN"],
+            )
 
         return {
-            "status": "ok",
+            "status": "shipped" if both_passed else "needs_review",
             "leader_name": leader["name"],
+            "leader_email": leader["email"],
             "live_url": live_url,
             "qa_status": qa_report["overall"],
             "qa_summary": f"{qa_report['passed']}/{qa_report['total_checks']} passed",
-            "warnings": [r for r in qa_report.get("results", []) if r["status"] != "PASS"],
+            "ai_review_status": ai_report["overall"],
+            "ai_review_summary": f"{ai_report['passed']}/{ai_report['total_checks']} passed",
+            "warnings": (
+                [r for r in qa_report.get("results", []) if r["status"] != "PASS"]
+                + [r for r in ai_report.get("results", []) if r["status"] != "PASS"]
+            ),
             "files_base64": _collect_deliverables_base64(out_dir),
         }
     finally:
