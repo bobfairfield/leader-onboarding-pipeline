@@ -95,7 +95,20 @@ def onboard(leader, pipeline_root, out_dir):
     tracker_dir = os.path.join(pipeline_root, "tracker-template")
     out_xlsx = os.path.join(out_dir, f"{uname}_Bio-Age_Prospect_Tracker.xlsx")
     run(["python3", "generate_leader_tracker.py", name, out_xlsx], cwd=tracker_dir)
-    run(["python3", "/mnt/skills/public/xlsx/scripts/recalc.py", out_xlsx])
+    recalc_path = "/mnt/skills/public/xlsx/scripts/recalc.py"
+    if os.path.exists(recalc_path):
+        # Only available in Claude's own sandbox (requires LibreOffice, which
+        # doesn't exist on Vercel). Best-effort only - Excel and Google Sheets
+        # both recalculate formulas automatically the moment a person actually
+        # opens the file, so skipping this doesn't affect the real deliverable.
+        run(["python3", recalc_path, out_xlsx])
+    else:
+        report["warnings"].append(
+            "Formula recalculation skipped (LibreOffice-based recalc tool isn't "
+            "available in this environment). This doesn't affect the tracker "
+            "itself - Excel and Google Sheets recalculate formulas automatically "
+            "on open."
+        )
     report["steps"].append({"deliverable": "prospect_tracker", "file": out_xlsx, "status": "generated"})
 
     # ---------- 3. Business card ----------
