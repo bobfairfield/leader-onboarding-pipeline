@@ -18,6 +18,7 @@ folder before anything goes live.
 import sys
 import os
 import json
+import re
 import shutil
 import subprocess
 
@@ -30,6 +31,26 @@ def slugify(name):
 
 def underscore(name):
     return name.replace(" ", "_")
+
+
+def clean_shaklee_handle(raw):
+    """
+    People will paste their full storefront URL instead of just the handle
+    (this already happened once in real testing). Extract just the handle
+    whether they gave us the bare word, a full URL, or something in between.
+    Returns an empty string if no real handle was actually provided.
+    """
+    raw = raw.strip()
+    match = re.search(r"en_US/([^/?#\s]+)", raw)
+    if match:
+        return match.group(1)
+    raw = re.sub(r"^https?://", "", raw)
+    raw = raw.rstrip("/")
+    result = raw.split("/")[-1] if raw else raw
+    # "en_US" left over from a bare URL prefix isn't a real handle
+    if result.lower() in ("en_us", "shaklee.com", "us.shaklee.com", ""):
+        return ""
+    return result
 
 
 def run(cmd, cwd=None):
@@ -51,10 +72,15 @@ def onboard(leader, pipeline_root, out_dir):
     uname = underscore(name)
     repo_slug = leader.get("repo_slug") or slugify(name)
     leader["repo_slug"] = repo_slug
-    leader["shaklee_path"] = f"en_US/{leader['shaklee_storefront_handle']}"
-
+    leader["shaklee_path"] = f"en_US/{clean_shaklee_handle(leader['shaklee_storefront_handle'])}"
     os.makedirs(out_dir, exist_ok=True)
     report = {"leader": name, "repo_slug": repo_slug, "steps": [], "warnings": []}
+    if leader["shaklee_path"] == "en_US/":
+        report["warnings"].append(
+            "Shaklee storefront handle couldn't be extracted from what was entered "
+            "(looks like she pasted just the base URL with no actual handle). "
+            "Her page links to the generic Shaklee storefront until you get her real handle."
+        )
 
     # ---------- 1. Wellness checklist ----------
     print("[1/4] Wellness checklist...")

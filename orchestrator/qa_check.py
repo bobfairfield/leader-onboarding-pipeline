@@ -37,7 +37,7 @@ def check_landing_page(leader, out_dir, results):
         ("leader name present in brand", f"{leader['name']} Longevity" in html),
         ("leader email present", leader["email"] in html),
         ("leader phone present", leader["phone"] in html),
-        ("shaklee path swapped", f"en_US/{leader['shaklee_storefront_handle']}" in html),
+        ("shaklee path swapped", leader.get("shaklee_path", "") in html),
         ("no leftover en_US/ferguson", "en_US/ferguson" not in html),
         ("og:url points at leader's repo", leader.get("repo_slug", "") in html),
         ("html well-formed (tag balance)", html.count("<html") == html.count("</html>") and html.count("<section") == html.count("</section>")),

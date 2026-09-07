@@ -42,8 +42,8 @@ def swap_simple_fields(html, leader):
 
     # Title / meta tags
     html = html.replace(
-        "Vivix+ Reversed 8 Years of Cellular Aging in 60 Days | Bob Ferguson Longevity",
-        f"Vivix+ Reversed 8 Years of Cellular Aging in 60 Days | {brand}",
+        "Vivix+&trade; Reversed 8 Years of Cellular Aging in 60 Days | Bob Ferguson Longevity",
+        f"Vivix+&trade; Reversed 8 Years of Cellular Aging in 60 Days | {brand}",
     )
     html = html.replace(
         'content="https://bobfairfield.github.io/bob-ferguson-landing/"',
