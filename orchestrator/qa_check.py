@@ -43,9 +43,9 @@ def check_landing_page(leader, out_dir, results):
         ("html well-formed (tag balance)", html.count("<html") == html.count("</html>") and html.count("<section") == html.count("</section>")),
     ]
     if leader.get("photo_path"):
-        checks.append(("about section present (photo was provided)", "about-leader-photo" in html))
+        checks.append(("about section present (photo was provided)", '<img class="about-leader-photo"' in html))
     else:
-        checks.append(("about section correctly omitted (no photo)", "about-leader-photo" not in html))
+        checks.append(("about section correctly omitted (no photo)", '<img class="about-leader-photo"' not in html))
 
     for label, ok in checks:
         results.append(("landing_page", "PASS" if ok else "FAIL", label))

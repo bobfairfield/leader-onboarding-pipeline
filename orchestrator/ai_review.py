@@ -86,6 +86,12 @@ def _review_card(leader, out_dir, api_key, results):
 
 
 def _review_copy(leader, out_dir, api_key, results):
+    if not leader.get("photo_path"):
+        # No About section exists at all in this case (see clone_landing_page.py) -
+        # there's no real bio text to review, so don't manufacture one to judge.
+        results.append(("landing_copy", "SKIP", "No bio to review (no photo on file, About section omitted)"))
+        return
+
     matches = glob.glob(os.path.join(out_dir, "*-index.html"))
     if not matches:
         results.append(("landing_copy", "FAIL", "No landing page found to review"))
@@ -94,7 +100,10 @@ def _review_copy(leader, out_dir, api_key, results):
         html = f.read()
 
     bio_match = re.search(r"<p><strong>Hi, I'm [^<]+\.</strong>(.*?)</p>", html, re.DOTALL)
-    bio_text = bio_match.group(1).strip() if bio_match else "(no About section - no photo on file)"
+    if not bio_match:
+        results.append(("landing_copy", "FAIL", "Photo was provided but no About section found on the page - personalization may have failed"))
+        return
+    bio_text = bio_match.group(1).strip()
 
     prompt = (
         f"Here is the About-section bio text generated for {leader['name']}'s "
