@@ -54,21 +54,20 @@ DELIVERABLE_GLOBS = [
 ]
 
 
-def _download_drive_photo(drive_url, dest_dir):
-    """Google Forms file-upload answers are Drive view links, not direct
-    downloads. Convert to a direct-download URL and pull the bytes."""
-    if not drive_url:
+def _save_photo_from_base64(photo_base64, photo_filename, dest_dir):
+    """Apps Script now fetches the photo itself (authenticated as the form
+    owner via DriveApp) and sends the actual bytes, rather than this webhook
+    trying to anonymously re-download it from Drive - a plain unauthenticated
+    request to a private file would likely hit a sign-in wall instead of the
+    real image."""
+    if not photo_base64:
         return None
-    file_id = None
-    if "/d/" in drive_url:
-        file_id = drive_url.split("/d/")[1].split("/")[0]
-    elif "id=" in drive_url:
-        file_id = drive_url.split("id=")[1].split("&")[0]
-    if not file_id:
-        return None
-    direct_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    dest_path = os.path.join(dest_dir, "photo.jpg")
-    urllib.request.urlretrieve(direct_url, dest_path)
+    ext = os.path.splitext(photo_filename or "")[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png"):
+        ext = ".jpg"
+    dest_path = os.path.join(dest_dir, f"photo{ext}")
+    with open(dest_path, "wb") as f:
+        f.write(base64.b64decode(photo_base64))
     return dest_path
 
 
@@ -91,7 +90,7 @@ def process_onboarding(payload):
     os.makedirs(out_dir, exist_ok=True)
 
     try:
-        photo_path = _download_drive_photo(payload.get("photo_drive_url"), work_dir)
+        photo_path = _save_photo_from_base64(payload.get("photo_base64"), payload.get("photo_filename"), work_dir)
 
         leader = {
             "name": payload["name"],
