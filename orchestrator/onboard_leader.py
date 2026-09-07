@@ -73,8 +73,17 @@ def onboard(leader, pipeline_root, out_dir):
     repo_slug = leader.get("repo_slug") or slugify(name)
     leader["repo_slug"] = repo_slug
     leader["shaklee_path"] = f"en_US/{clean_shaklee_handle(leader['shaklee_storefront_handle'])}"
+
     os.makedirs(out_dir, exist_ok=True)
     report = {"leader": name, "repo_slug": repo_slug, "steps": [], "warnings": []}
+    if leader["color_scheme"] not in ("wine_gold", "sage_forest"):
+        report_note = (
+            f"Unrecognized color_scheme value {leader['color_scheme']!r} - "
+            "defaulting to wine_gold. This shouldn't happen if Apps Script's "
+            "own mapping is intact; if you see this, check that mapping."
+        )
+        leader["color_scheme"] = "wine_gold"
+        report["warnings"].append(report_note)
     if leader["shaklee_path"] == "en_US/":
         report["warnings"].append(
             "Shaklee storefront handle couldn't be extracted from what was entered "
