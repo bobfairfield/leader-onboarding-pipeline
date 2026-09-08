@@ -95,7 +95,7 @@ def onboard(leader, pipeline_root, out_dir):
     print("[1/4] Wellness checklist...")
     wellness_dir = os.path.join(pipeline_root, "wellness-template")
     out_pdf = os.path.join(out_dir, f"{uname}_How_Do_You_Feel_Today.pdf")
-    run(["python3", "generate_leader_form.py", name, leader["phone"], leader["email"], out_pdf],
+    run([sys.executable, "generate_leader_form.py", name, leader["phone"], leader["email"], out_pdf],
         cwd=wellness_dir)
     report["steps"].append({"deliverable": "wellness_checklist", "file": out_pdf, "status": "generated"})
 
@@ -103,14 +103,14 @@ def onboard(leader, pipeline_root, out_dir):
     print("[2/4] Prospect tracker...")
     tracker_dir = os.path.join(pipeline_root, "tracker-template")
     out_xlsx = os.path.join(out_dir, f"{uname}_Bio-Age_Prospect_Tracker.xlsx")
-    run(["python3", "generate_leader_tracker.py", name, out_xlsx], cwd=tracker_dir)
+    run([sys.executable, "generate_leader_tracker.py", name, out_xlsx], cwd=tracker_dir)
     recalc_path = "/mnt/skills/public/xlsx/scripts/recalc.py"
     if os.path.exists(recalc_path):
         # Only available in Claude's own sandbox (requires LibreOffice, which
         # doesn't exist on Vercel). Best-effort only - Excel and Google Sheets
         # both recalculate formulas automatically the moment a person actually
         # opens the file, so skipping this doesn't affect the real deliverable.
-        run(["python3", recalc_path, out_xlsx])
+        run([sys.executable, recalc_path, out_xlsx])
     else:
         report["warnings"].append(
             "Formula recalculation skipped (LibreOffice-based recalc tool isn't "
@@ -129,7 +129,7 @@ def onboard(leader, pipeline_root, out_dir):
     no_photo = bool(leader.get("no_photo")) or not leader.get("photo_path")
 
     cmd = [
-        "python3", "generate_card.py", name, brand_suffix, leader["email"], leader["phone"],
+        sys.executable, "generate_card.py", name, brand_suffix, leader["email"], leader["phone"],
         landing_url,
     ]
     if no_photo:
@@ -157,7 +157,7 @@ def onboard(leader, pipeline_root, out_dir):
     with open(leader_json_path, "w") as f:
         json.dump(leader, f)
     out_html = os.path.join(out_dir, f"{uname}-index.html")
-    run(["python3", "clone_landing_page.py", leader_json_path, out_html], cwd=landing_dir)
+    run([sys.executable, "clone_landing_page.py", leader_json_path, out_html], cwd=landing_dir)
     report["steps"].append({"deliverable": "landing_page", "file": out_html, "status": "generated"})
     if not leader.get("photo_path"):
         report["warnings"].append("No photo provided - landing page About section omitted (placeholder left).")
