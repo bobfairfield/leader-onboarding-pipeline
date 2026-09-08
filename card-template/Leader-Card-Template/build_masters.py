@@ -1,193 +1,189 @@
 """
-Build clean master card templates (no leader-specific text, no leader photo)
-from the original ChatGPT artwork, for both color schemes.
+Run ONCE (or whenever the raw master PDFs change) to produce clean,
+text-erased front backgrounds for each color scheme. generate_card.py
+loads these clean masters directly, so per-leader generation never has
+to repeat the (slow) inpainting/reconstruction step.
 
-This is a ONE-TIME build step. Run it once to produce the master PNGs;
-generate_leader_card.py then uses those masters for every leader.
+Input:  masters/sage_0.png, masters/wine_0.png   (raw front masters,
+        1200x686px, extracted from Bob's own finished card PDFs)
+Output: masters/sage_front_clean.png, masters/wine_front_clean.png
 """
+import os
+import cv2
 import numpy as np
-from PIL import Image
-import colorsys
+from scipy.ndimage import distance_transform_edt
 
-# ---------- helpers ----------
+# Diagonal gold-band centerline, identical geometry across both schemes
+# (measured directly from Bob's finished cards). x = CENTER(y).
+def CENTER(y):
+    return 838.57 - 0.1857 * y
 
-def rgb_to_hsl_np(rgb):
-    r, g, b = rgb[..., 0] / 255.0, rgb[..., 1] / 255.0, rgb[..., 2] / 255.0
-    maxc = np.max(rgb / 255.0, axis=-1)
-    minc = np.min(rgb / 255.0, axis=-1)
-    l = (maxc + minc) / 2
-    delta = maxc - minc
-    s = np.zeros_like(l)
-    mask = delta > 1e-6
-    s[mask] = np.where(l[mask] < 0.5, delta[mask] / (maxc[mask] + minc[mask] + 1e-8),
-                        delta[mask] / (2.0 - maxc[mask] - minc[mask] + 1e-8))
-    h = np.zeros_like(l)
-    rc = np.zeros_like(l); gc = np.zeros_like(l); bc = np.zeros_like(l)
-    rc[mask] = (maxc[mask] - r[mask]) / (delta[mask] + 1e-8)
-    gc[mask] = (maxc[mask] - g[mask]) / (delta[mask] + 1e-8)
-    bc[mask] = (maxc[mask] - b[mask]) / (delta[mask] + 1e-8)
-    h = np.where((maxc == r) & mask, (bc - gc), h)
-    h = np.where((maxc == g) & mask, (2.0 + rc - bc), h)
-    h = np.where((maxc == b) & mask, (4.0 + gc - rc), h)
-    h = (h / 6.0) % 1.0
-    return h * 360, s * 100, l * 100
+LEFT, TOP, BOTTOM = 30, 16, 670
 
 
-def hls_to_rgb_vec(h, l, s):
-    def hue2rgb(p, q, t):
-        t = np.mod(t, 1.0)
-        res = np.where(t < 1/6, p + (q - p) * 6 * t, p)
-        res = np.where((t >= 1/6) & (t < 1/2), q, res)
-        res = np.where((t >= 1/2) & (t < 2/3), p + (q - p) * (2/3 - t) * 6, res)
-        return res
-    q = np.where(l < 0.5, l * (1 + s), l + s - l * s)
-    p = 2 * l - q
-    r = hue2rgb(p, q, h + 1/3)
-    g = hue2rgb(p, q, h)
-    b = hue2rgb(p, q, h - 1/3)
-    return r, g, b
+def clean_front(path_in, path_out):
+    img = cv2.imread(path_in).astype(np.float32)
+    h, w, _ = img.shape
+    r = img[:, :, 2]
 
+    def safe_right(y):
+        return CENTER(y) - 9.5 - 3  # stop safely before the gold band
 
-def strip_border(img, thresh=30):
-    """Remove the flattened-image's black export border and rescale back to
-    the original 1200x686 canvas."""
-    arr = np.array(img.convert("RGB")).astype(int)
-    H, W, _ = arr.shape
+    safe = np.zeros((h, w), dtype=bool)
+    for y in range(TOP, BOTTOM):
+        xr = int(safe_right(y))
+        xr = max(LEFT, min(xr, w))
+        safe[y, LEFT:xr] = True
 
-    def first_nonblack(vals):
-        for i, px in enumerate(vals):
-            if px.sum() > thresh:
-                return i
-        return 0
+    text_mask = np.zeros((h, w), dtype=bool)
+    text_mask[safe] = r[safe] > 28
 
-    top = first_nonblack(arr[:30, W // 2])
-    bottom = H - 1 - first_nonblack(arr[::-1, W // 2][:30])
-    left = first_nonblack(arr[H // 2, :40])
-    right = W - 1 - first_nonblack(arr[H // 2, ::-1][:40])
-    cropped = img.crop((left + 2, top + 2, right - 2, bottom - 2))
-    return cropped.resize((W, H), Image.LANCZOS)
+    text_u8 = (text_mask.astype(np.uint8)) * 255
+    text_u8 = cv2.dilate(text_u8, np.ones((5, 5), np.uint8), iterations=2)
+    text_mask = (text_u8 > 0) & safe  # re-clip to safe zone, never touch border/gold
 
+    valid = safe & (~text_mask)
 
-def recolor_hue(img, target_hue, hue_lo=325, hue_hi=10, light_max=40, sat_min=10):
-    """Shift only the wine-family pixels to target_hue, preserving each
-    pixel's own saturation/lightness (so gradient + texture survive)."""
-    arr = np.array(img.convert("RGB")).astype(float)
-    h, s, l = rgb_to_hsl_np(arr)
-    mask = (((h >= hue_lo) & (h <= 360)) | (h <= hue_hi)) & (l < light_max) & (s > sat_min)
-    new_h = np.where(mask, target_hue, h)
-    r, g, b = hls_to_rgb_vec(new_h.flatten() / 360.0, l.flatten() / 100.0, s.flatten() / 100.0)
-    out = np.stack([r, g, b], axis=-1).reshape(arr.shape) * 255
-    final = np.where(mask[..., None], out, arr)
-    return Image.fromarray(np.clip(final, 0, 255).astype("uint8")), mask
+    img_nan = img.copy()
+    for c in range(3):
+        img_nan[:, :, c] = np.where(valid, img[:, :, c], np.nan)
 
+    block = 14
+    Hc, Wc = h // block + 1, w // block + 1
+    coarse = np.zeros((Hc, Wc, 3), dtype=np.float32)
+    coarse_valid = np.zeros((Hc, Wc), dtype=bool)
+    for by in range(Hc):
+        for bx in range(Wc):
+            y0, y1 = by * block, min((by + 1) * block, h)
+            x0, x1 = bx * block, min((bx + 1) * block, w)
+            blockdata = img_nan[y0:y1, x0:x1, :]
+            if blockdata.size == 0:
+                continue
+            m = ~np.isnan(blockdata[:, :, 0])
+            if m.sum() > 3:
+                for c in range(3):
+                    coarse[by, bx, c] = np.nanmean(blockdata[:, :, c])
+                coarse_valid[by, bx] = True
 
-def find_panel_edges(front_arr):
-    """Fit straight-line equations for the wine panel's right edge (= gold
-    line's inner edge) and the gold line's outer edge, per row."""
-    H, W, _ = front_arr.shape
-    r = front_arr[..., 0].astype(int); g = front_arr[..., 1].astype(int); b = front_arr[..., 2].astype(int)
-    gold_mask = (r > 140) & (g > 90) & (g < 225) & (b < 170) & (r > g) & (g >= b - 5)
-    lum = (front_arr.max(axis=-1).astype(float) + front_arr.min(axis=-1).astype(float)) / 2
-    wine_like = (r > g + 10) & (lum < 40) & (r > 15)
+    ind = distance_transform_edt(~coarse_valid, return_distances=False, return_indices=True)
+    for c in range(3):
+        coarse[:, :, c] = coarse[:, :, c][tuple(ind)]
 
-    left_edges = np.full(H, np.nan)
-    right_edges = np.full(H, np.nan)
-    for y in range(H):
-        xs = np.where(wine_like[y, 600:950])[0]
-        if len(xs) > 3:
-            le = 600 + xs.max()
-            xs2 = np.where(gold_mask[y, le:le + 40])[0]
-            if len(xs2) > 2:
-                re = le + xs2.max()
-                w = re - le
-                if 5 <= w <= 20:
-                    left_edges[y] = le
-                    right_edges[y] = re
+    smooth = cv2.resize(coarse, (w, h), interpolation=cv2.INTER_CUBIC)
+    smooth = cv2.GaussianBlur(smooth, (0, 0), sigmaX=6)
 
-    good = ~np.isnan(left_edges)
-    ys_good = np.where(good)[0]
-    lcoef = np.polyfit(ys_good, left_edges[good], 1)
-    rcoef = np.polyfit(ys_good, right_edges[good], 1)
-    all_y = np.arange(H).astype(float)
-    return np.polyval(lcoef, all_y), np.polyval(rcoef, all_y), wine_like
-
-
-def rebuild_clean_panel(front_arr, left_edge, wine_like):
-    """Fit a smooth bilinear gradient to the panel's own background pixels
-    (well clear of text and the gold edge) and use it to replace every
-    pixel behind the leader's name/contact text, removing it cleanly."""
-    H, W, _ = front_arr.shape
-    xs_grid = np.arange(W)
-    safe_region = (xs_grid[None, :] < (left_edge[:, None] - 45)) & (xs_grid[None, :] >= 10)
-    valid = wine_like & safe_region
-    ys_v, xs_v = np.where(valid)
-    n = len(ys_v)
+    out = img.copy()
     rng = np.random.default_rng(0)
-    idx = rng.choice(n, size=min(30000, n), replace=False)
-    xs_s = xs_v[idx].astype(float); ys_s = ys_v[idx].astype(float)
-    xn = xs_s / W; yn = ys_s / H
-
-    def design(xn, yn):
-        return np.stack([np.ones_like(xn), xn, yn, xn * yn], axis=1)
-
-    A = design(xn, yn)
-    models = []
+    noise = rng.normal(0, 2.2, size=(h, w, 3)).astype(np.float32)
+    fill = smooth + noise
     for c in range(3):
-        vals = front_arr[ys_s.astype(int), xs_s.astype(int), c]
-        coef, *_ = np.linalg.lstsq(A, vals, rcond=None)
-        models.append(coef)
+        ch = out[:, :, c]
+        chf = fill[:, :, c]
+        ch[text_mask] = chf[text_mask]
+        out[:, :, c] = ch
 
-    full_x, full_y = np.meshgrid(np.arange(W).astype(float) / W, np.arange(H).astype(float) / H)
-    A_full = design(full_x.ravel(), full_y.ravel())
-    recon = np.zeros((H, W, 3))
+    out = np.clip(out, 0, 255).astype(np.uint8)
+    cv2.imwrite(path_out, out)
+    print(f"wrote {path_out}")
+
+
+def full_bleed_background(path_in, path_out):
+    """No-photo layout background: same smooth reconstruction as clean_front,
+    but extrapolated across the FULL card width (no diagonal, no photo)."""
+    img = cv2.imread(path_in).astype(np.float32)
+    h, w, _ = img.shape
+    r = img[:, :, 2]
+
+    def safe_right(y):
+        return CENTER(y) - 9.5 - 3
+
+    safe = np.zeros((h, w), dtype=bool)
+    for y in range(TOP, BOTTOM):
+        xr = int(safe_right(y))
+        xr = max(LEFT, min(xr, w))
+        safe[y, LEFT:xr] = True
+
+    text_mask = np.zeros((h, w), dtype=bool)
+    text_mask[safe] = r[safe] > 28
+    text_u8 = (text_mask.astype(np.uint8)) * 255
+    text_u8 = cv2.dilate(text_u8, np.ones((5, 5), np.uint8), iterations=2)
+    text_mask = (text_u8 > 0) & safe
+
+    valid = safe & (~text_mask)  # only ever sample true background pixels
+
+    img_nan = img.copy()
     for c in range(3):
-        recon[..., c] = (A_full @ models[c]).reshape(H, W)
-    recon = np.clip(recon, 0, 255)
+        img_nan[:, :, c] = np.where(valid, img[:, :, c], np.nan)
 
-    panel_region = xs_grid[None, :] < (left_edge[:, None] - 2)
-    final = np.where(panel_region[..., None], recon, front_arr)
-    return np.clip(final, 0, 255).astype("uint8")
+    block = 14
+    Hc, Wc = h // block + 1, w // block + 1
+    coarse = np.zeros((Hc, Wc, 3), dtype=np.float32)
+    coarse_valid = np.zeros((Hc, Wc), dtype=bool)
+    for by in range(Hc):
+        for bx in range(Wc):
+            y0, y1 = by * block, min((by + 1) * block, h)
+            x0, x1 = bx * block, min((bx + 1) * block, w)
+            blockdata = img_nan[y0:y1, x0:x1, :]
+            if blockdata.size == 0:
+                continue
+            m = ~np.isnan(blockdata[:, :, 0])
+            if m.sum() > 3:
+                for c in range(3):
+                    coarse[by, bx, c] = np.nanmean(blockdata[:, :, c])
+                coarse_valid[by, bx] = True
+
+    ind = distance_transform_edt(~coarse_valid, return_distances=False, return_indices=True)
+    for c in range(3):
+        coarse[:, :, c] = coarse[:, :, c][tuple(ind)]
+
+    smooth = cv2.resize(coarse, (w, h), interpolation=cv2.INTER_CUBIC)
+    smooth = cv2.GaussianBlur(smooth, (0, 0), sigmaX=10)
+
+    rng = np.random.default_rng(1)
+    noise = rng.normal(0, 2.2, size=(h, w, 3)).astype(np.float32)
+    out = np.clip(smooth + noise, 0, 255).astype(np.uint8)
+    cv2.imwrite(path_out, out)
+    print(f"wrote {path_out}")
 
 
-def strip_back_border_and_clean(back_img, target_hue):
-    cropped = strip_border(back_img)
-    recolored, _ = recolor_hue(cropped, target_hue, light_max=45)
-    return recolored
+def build_nophoto_front(bg_path, out_path, gold_top=(204, 165, 88), border_color=(0, 0, 0)):
+    """Adds the border frame + translucent VIVIX+ watermark on top of a
+    full-bleed background. Text is drawn later, per-leader, by generate_card.py."""
+    base = cv2.imread(bg_path)
+    base = cv2.cvtColor(base, cv2.COLOR_BGR2RGB)
+    from PIL import Image, ImageDraw
+    base = Image.fromarray(base)
+    w, h = base.size
+    draw = ImageDraw.Draw(base)
 
+    bt = 14
+    draw.rectangle([0, 0, w - 1, bt], fill=border_color)
+    draw.rectangle([0, h - 1 - bt, w - 1, h - 1], fill=border_color)
+    draw.rectangle([0, 0, bt, h - 1], fill=border_color)
+    draw.rectangle([w - 1 - bt, 0, w - 1, h - 1], fill=border_color)
+    draw.rectangle([bt + 6, bt + 6, w - 1 - bt - 6, h - 1 - bt - 6], outline=gold_top, width=1)
 
-# ---------- main build ----------
+    mask = Image.open("masters/vivix_mask.png")
+    scale = 1.65
+    wm = mask.resize((int(mask.width * scale), int(mask.height * scale)), Image.LANCZOS)
+    wm_gold = Image.new("RGBA", wm.size, gold_top + (0,))
+    wm_alpha = wm.split()[3].point(lambda p: int(p * 0.11))
+    wm_gold.putalpha(wm_alpha)
+    wx = w - wm.width - 70
+    wy = int(h * 0.62 - wm.height / 2)
+    base.paste(wm_gold, (wx, wy), wm_gold)
+
+    base.save(out_path)
+    print(f"wrote {out_path}")
+
 
 if __name__ == "__main__":
-    SCHEMES = {
-        "wine_gold": 339.0,
-        "sage_forest": 150.0,  # forest green hue
-    }
+    clean_front("masters/sage_0.png", "masters/sage_front_clean.png")
+    clean_front("masters/wine_0.png", "masters/wine_front_clean.png")
 
-    front_raw = Image.open("front_extracted.png").convert("RGB")
-    back_raw = Image.open("back_extracted.png").convert("RGB")
-
-    front_clean_base = strip_border(front_raw)
-    back_clean_base = strip_border(back_raw)
-    front_clean_base.save("front_border_stripped.png")
-    back_clean_base.save("back_border_stripped.png")
-
-    # detect panel geometry ONCE on the original (still-wine) image --
-    # the shape is identical across schemes, only the color changes
-    orig_arr = np.array(front_clean_base.convert("RGB"))
-    left_edge, right_edge, wine_like = find_panel_edges(orig_arr)
-    np.save("left_edge.npy", left_edge)
-    np.save("right_edge.npy", right_edge)
-
-    for scheme_name, hue in SCHEMES.items():
-        front_recolored, _ = recolor_hue(front_clean_base, hue)
-        front_arr = np.array(front_recolored.convert("RGB")).astype(float)
-
-        # reuse the SAME wine_like mask/geometry (from the original) to
-        # sample the gradient, just pulling colors from the recolored image
-        clean_panel_arr = rebuild_clean_panel(front_arr, left_edge, wine_like)
-        Image.fromarray(clean_panel_arr).save(f"front_master_{scheme_name}.png")
-
-        back_recolored = strip_back_border_and_clean(back_clean_base, hue)
-        back_recolored.save(f"back_master_{scheme_name}.png")
-
-        print(f"built master for {scheme_name}")
+    full_bleed_background("masters/sage_0.png", "masters/_sage_fullbleed_tmp.png")
+    full_bleed_background("masters/wine_0.png", "masters/_wine_fullbleed_tmp.png")
+    build_nophoto_front("masters/_sage_fullbleed_tmp.png", "masters/sage_nophoto_bg.png")
+    build_nophoto_front("masters/_wine_fullbleed_tmp.png", "masters/wine_nophoto_bg.png")
+    os.remove("masters/_sage_fullbleed_tmp.png")
+    os.remove("masters/_wine_fullbleed_tmp.png")

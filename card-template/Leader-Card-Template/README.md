@@ -1,126 +1,90 @@
-# Bio-Age Reset Stack Leader Card Template
+# Leader Business Card Generator (v2)
 
-Generates a personalized Vivix+ / Bio-Age Reset Stack business card (front +
-back, print-ready PDF) for any leader in two color schemes: **Wine & Gold**
-and **Sage & Forest**. Built directly from Bob's original hand-tuned card
-artwork, not a redrawn approximation, so the panel gradient, gold border,
-hallmarks-of-aging ellipse, and typography all trace back to the real design.
+Produces print-ready, 343dpi, 3.5"x2" front+back business card PDFs by
+compositing onto Bob's own real finished card art (not a redraw), so every
+leader card stays pixel-consistent with Bob's and Dubi's originals.
 
-## Quick start
+## Setup (already done, included in this zip)
+`masters/sage_front_clean.png` and `masters/wine_front_clean.png` are
+pre-built, text-erased backgrounds (borders, gold diagonal band, and
+texture all intact, ready for a new photo + name to be composited on).
+`masters/sage_1.png` / `masters/wine_1.png` are the untouched back-card
+masters (12 Hallmarks wheel art).
 
-You do NOT need to run `build_masters.py` — the master templates are already
-built and included. Just generate a card:
+Only re-run `python3 build_masters.py` if the raw master card PDFs
+themselves change (masters/sage_0.png, masters/wine_0.png) - e.g. if
+Bob's own card design is revised. It re-derives the clean front
+backgrounds from scratch (~30 seconds).
 
-```bash
-python3 generate_leader_card.py "Leader Name" "phone" "email" \
-    "website or landing-page line" \
+## Usage
+```
+python3 generate_card.py "Leader Name" "Longevity|Community" \
+    "email@example.com" "555-123-4567" \
     "https://bobfairfield.github.io/leader-landing/" \
-    "leader_photo.jpg" "wine_gold" "Leader_Name_Card"
+    "headshot.jpg" sage|wine out_prefix \
+    [--bw] [--tagline "Aging Reimagined"] [--website "leaderdomain.com"]
+```
+- `--bw` renders the headshot in black & white (use for low-res/stylized
+  photos that won't hold up well in color at print size).
+- `--tagline` adds an italic line under the brand suffix (only if the
+  leader's landing page actually uses one - most don't).
+- `--website` adds a third contact row with a globe icon (only if the
+  leader has a short custom domain; otherwise leave it out and let the
+  QR code do the linking).
+- Brand suffix is "Longevity" for most leaders, but check the leader's
+  own live landing page footer first - Torah and Lohrainne use
+  "Community" instead, and that's intentional, not a typo to fix.
+
+Produces `{out_prefix}_front.pdf`, `{out_prefix}_back.pdf`, and
+`{out_prefix}_both_sides.pdf` (the one to actually send to print).
+
+## Example (Torah Torres, already produced)
+```
+python3 generate_card.py "Torah Torres" "Community" \
+    "Shaklee@TorahTorres.com" "805-223-1885" \
+    "https://bobfairfield.github.io/torah-torres-landing/" \
+    torah_headshot.jpg sage Torah --bw
 ```
 
-This produces `Leader_Name_Card_front.pdf`, `Leader_Name_Card_back.pdf`, and
-matching `_preview.png` files for a quick look before printing. Scheme is
-`wine_gold` or `sage_forest`.
+## Design constants worth knowing
+- Diagonal gold-band centerline: `x = 838.57 - 0.1857*y` (identical on
+  both schemes, measured directly from Bob's own card). Photo starts
+  ~11.5px to the right of that; text/background must stay ~12.5px to
+  the left of it - `build_masters.py` already respects this.
+- QR code on the back must stay left of `x=356` in the 1200x686 canvas -
+  the "12 Hallmarks" wheel's leftmost point sits at ~x=363 at its
+  narrowest (y~350), and going past that flattens the ellipse.
+- Never hand-edit a generated PDF/PNG. If something needs to change for
+  one leader, change the input. If something needs to change for every
+  leader, edit `build_masters.py` or the raw masters and re-run it.
 
-**Website field:** if the leader has their own domain, use it
-(`"leadername.com"`). If not, use something like `"Scan to visit my page"` —
-it just needs to read naturally next to the globe icon; it doesn't have to be
-a URL.
+## No-photo card mode (added Sept 2026)
 
-## Two-person / non-standard photos
+For leaders who don't have a Google account and don't want to create one
+just to upload a photo (Google Forms requires sign-in for any file upload,
+full stop - not a setting that can be turned off).
 
-The default framing (`photo_region_w=480, photo_vbias=0.22`) is tuned for a
-single centered headshot. For a couple photo, a wider shot, or anything that
-doesn't crop well by default, call `build_front` directly instead of using
-the command line, and adjust:
-
-```python
-import generate_leader_card as glc
-
-front = glc.build_front(
-    "wine_gold", "Leader Name", "phone", "email", "website",
-    "photo.jpg",
-    photo_region_w=480,   # larger = zooms OUT (shows more of the original photo)
-    photo_vbias=0.15,     # 0 = crop from the very top, 0.5 = crop centered
-)
-front.save("Leader_front.png")
+```
+python3 generate_card.py "Leader Name" "Longevity|Community" \
+    "email@example.com" "555-123-4567" \
+    "https://bobfairfield.github.io/leader-landing/" \
+    none sage|wine out_prefix --no-photo
 ```
 
-Render a few region_w values (try 480, 650, 800) and eyeball which one keeps
-everyone's face fully in frame before committing. Then build the back with
-`glc.build_back(scheme_key, landing_url)` and export both to PDF (see
-`generate()` in `generate_leader_card.py` for the exact PDF export call).
+`photo_path` is ignored when `--no-photo` is set (pass anything, e.g. `none`).
 
-## What's included
+Layout: full-bleed color panel (no diagonal cut), same name/brand-suffix/
+contact typography as the photo version, with a large low-opacity VIVIX+
+watermark on the right in place of the headshot. Masters:
+`masters/sage_nophoto_bg.png`, `masters/wine_nophoto_bg.png` (pre-built;
+`build_masters.py` regenerates them from the raw masters if ever needed).
 
-- `generate_leader_card.py` — the per-leader generator. This is the only
-  script you run routinely.
-- `build_masters.py` — the one-time script that built the master templates
-  from the original artwork. You will not normally need to touch this — see
-  "If something breaks" below.
-- `front_master_wine_gold.png`, `back_master_wine_gold.png` — clean Wine &
-  Gold templates: original gradient panel, gold border, ellipse, and icons
-  intact, with all of Bob's personal text and photo removed.
-- `front_master_sage_forest.png`, `back_master_sage_forest.png` — same, hue-
-  shifted to forest green (gold stays constant across both schemes).
-- `right_edge.npy`, `left_edge.npy` — the exact diagonal boundary geometry
-  (as fitted line equations, sampled per row) that both scheme masters share.
-  `generate_leader_card.py` needs `right_edge.npy` at runtime to composite
-  photos into precisely the right diagonal frame.
-- `front_extracted.png`, `back_extracted.png` — the raw original artwork
-  (before border-stripping/recoloring), kept so `build_masters.py` can be
-  re-run from scratch if a master ever needs to change.
-- `sample_photo.jpg` — Bob's headshot, used for testing only.
-
-## How this was built (for future reference / the agent)
-
-1. **Border removal**: the original flattened export had a black margin
-   around all four edges. Detected and cropped it out, rescaled back to the
-   canonical 1200×686px (3.5"×2" at ~343 DPI) canvas.
-2. **Panel/gold-line geometry**: the diagonal boundary between the color
-   panel and the photo isn't a simple fixed line — it was fitted per-row from
-   the actual artwork (a wine-colored pixel detector finds the panel's right
-   edge; a gold-colored pixel detector finds the divider line's outer edge),
-   then straight-line-fit for a clean, non-jittery edge. This geometry is
-   identical for both schemes and is what `right_edge.npy` stores.
-3. **Recoloring**: only pixels in the wine hue family were hue-shifted (to
-   true Shaklee wine 4F1026 for Wine & Gold, or forest green for Sage &
-   Forest) — gold, white text, and the photo were left completely alone. The
-   recolor is spatially restricted to the panel region only, so it can never
-   bleed into a leader's photo.
-4. **Clean master (text removal)**: rather than inpainting over Bob's name
-   and contact info (which produced ugly ghosting/artifacts), a smooth
-   bilinear gradient was fit directly to the actual unobstructed background
-   pixels and used to regenerate the entire panel background from scratch.
-   This is why the master's panel has zero ghosting — it's not
-   reconstructed from damaged pixels, it's a fresh, clean re-render of the
-   same gradient.
-5. **Text metrics**: every font size, position, and color in
-   `generate_leader_card.py` was measured directly from Bob's finished card
-   (pixel bounding boxes of each text line), not estimated. This includes
-   the vertical gold-to-dark gradient on the word "Longevity", which is a
-   real effect in the original artwork (bright gold ~(204,165,88) at the top
-   of the letters fading to a darker (150,109,38) at the bottom).
-
-## Known limitations
-
-- **Icons are simplified approximations.** The envelope, phone, and globe
-  icons are drawn with basic PIL shapes, not the original artwork's icons.
-  They're clean and legible but not pixel-identical to Bob's card.
-- **Font size is fixed, not auto-scaling.** A dramatically longer or shorter
-  name than "Bob Ferguson" or "Dubi Gordon" may need the `NAME_SIZE` constant
-  nudged down/up, or could overflow the panel width. Preview before printing.
-- **Photo framing is manual for anything non-standard** (couples, group
-  shots, non-headshot crops) — see the section above.
-
-## If something breaks / needs to change
-
-- If a leader's card looks wrong (text position, font size, icon), that's a
-  **template** problem — fix it in `generate_leader_card.py` and it fixes
-  itself for every future leader.
-- If the master template itself needs to change (e.g. a different gold
-  tone, a third color scheme), edit `build_masters.py` and re-run it — it
-  rebuilds both scheme masters from `front_extracted.png` /
-  `back_extracted.png` in about 10 seconds.
-- Never hand-edit a generated leader's PNG/PDF directly. If it's wrong,
-  fix the input to the script and regenerate.
+### Form side
+The onboarding Google Form now asks "Business card style" (With my photo /
+No-photo design) right before the headshot upload question, so the choice
+is explicit before anyone hits the Google sign-in wall. **The Vercel
+webhook (`onboard_leader.py`) needs a matching update** to read that field
+and call `generate(..., no_photo=True)` when "No-photo design" is chosen -
+that repo isn't available in this session, so that wiring still needs to
+happen on Bob's end (or in a session with GitHub access to
+`leader-onboarding-pipeline`).

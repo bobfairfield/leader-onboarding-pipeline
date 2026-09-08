@@ -89,19 +89,18 @@ def check_tracker(leader, out_dir, results):
 def check_card(leader, out_dir, results):
     front = glob.glob(os.path.join(out_dir, "*Card_front.pdf"))
     back = glob.glob(os.path.join(out_dir, "*Card_back.pdf"))
-    if not leader.get("photo_path"):
-        results.append(("business_card", "SKIP", "No photo provided - card intentionally skipped"))
-        return
     if not front or not back:
-        results.append(("business_card", "FAIL", "Front or back card PDF missing despite photo being provided"))
+        results.append(("business_card", "FAIL", "Front or back card PDF missing"))
         return
     for label, path in [("front", front[0]), ("back", back[0])]:
         reader = PdfReader(path)
         page = reader.pages[0]
         w, h = float(page.mediabox.width), float(page.mediabox.height)
-        # 3.5x2in at 300dpi = 1050x600pt in PDF points (72pt/in) -> just check aspect ratio ~1.75
+        # 3.5x2in at 343dpi -> just check aspect ratio ~1.75, dpi-independent
         ratio_ok = abs((w / h) - 1.75) < 0.05
         results.append(("business_card", "PASS" if ratio_ok else "FAIL", f"{label} card is 3.5x2in aspect ratio"))
+    no_photo = bool(leader.get("no_photo")) or not leader.get("photo_path")
+    results.append(("business_card", "PASS", f"card style: {'no-photo layout' if no_photo else 'with photo'}"))
 
 
 def run_qa(leader, out_dir):

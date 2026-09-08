@@ -1,62 +1,72 @@
 /**
- * Bound to the Google Sheet that collects Leader Intake Form responses.
+ * Handles onFormSubmit for BOTH onboarding forms and sends a normalized
+ * payload to the Vercel webhook. Standalone script (not container-bound) -
+ * install once, wires triggers on both forms' response sheets, and keeps
+ * running with zero manual action needed per submission.
+ *
+ * Replaces the old single-form version: that one sent `photo_drive_url`,
+ * but the webhook only ever reads `photo_base64` / `photo_filename` - the
+ * two never matched, so every submission's photo was silently dropped.
+ * This version fetches the actual file bytes via DriveApp and sends those.
  *
  * Setup:
- *   1. Open the linked Sheet -> Extensions -> Apps Script.
- *   2. Paste this in, replacing Code.gs.
- *   3. Set WEBHOOK_URL below to your deployed pipeline endpoint.
- *   4. Set WEBHOOK_SECRET to a random string; set the same value as an
- *      env var on the webhook side so it can verify requests came from
- *      here and not from someone who found the URL.
- *   5. Run `installTrigger` once from the Apps Script editor (it'll ask
- *      for permissions) - this wires onFormSubmit to fire automatically
- *      forever after, with zero manual action needed per submission.
- *
- * Column order below must match your form's field order exactly. If you
- * reorder form questions, update COLUMNS to match.
+ *   1. Update WEBHOOK_URL and WEBHOOK_SECRET below.
+ *   2. Update FORM_WITH_PHOTO_ID and FORM_NO_ACCOUNT_ID below if either
+ *      form is ever recreated (IDs change).
+ *   3. Run installTriggers() once (asks for permissions the first time).
+ *   4. Test both forms end to end before telling leaders to use them.
  */
 
-const WEBHOOK_URL = "https://YOUR-DEPLOYMENT.vercel.app/api/onboard";
-const WEBHOOK_SECRET = "REPLACE_WITH_A_RANDOM_STRING";
+const WEBHOOK_URL = "https://leader-onboarding-pipeline.vercel.app/api/onboard";
+const WEBHOOK_SECRET = "REPLACE_WITH_YOUR_ACTUAL_SECRET"; // must match Vercel's WEBHOOK_SECRET env var
 
-const COLUMNS = {
-  TIMESTAMP: 0,
-  NAME: 1,
-  EMAIL: 2,
-  PHONE: 3,
-  SHAKLEE_HANDLE: 4,
-  COLOR_SCHEME: 5,
-  PHOTO_URL: 6,   // Google Forms writes the Drive file URL here
-  BIO: 7,
-};
+const FORM_WITH_PHOTO_ID = "1OcsZTE2epS8Iwxz7JEZ0kMrixU30xVJHkCMA99ZxLkk";
+const FORM_NO_ACCOUNT_ID = "10RodpCslCDyt43SbgtlOg5Yx-RiVoyw78GYRyThqsnk";
 
-function installTrigger() {
-  ScriptApp.newTrigger("onFormSubmit")
-    .forSpreadsheet(SpreadsheetApp.getActive())
+function installTriggers() {
+  // Remove any old triggers on these two forms first so re-running this is safe.
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === "onFormSubmit_WithPhoto" ||
+        t.getHandlerFunction() === "onFormSubmit_NoAccount") {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  ScriptApp.newTrigger("onFormSubmit_WithPhoto")
+    .forForm(FormApp.openById(FORM_WITH_PHOTO_ID))
     .onFormSubmit()
     .create();
-  Logger.log("Trigger installed. New form submissions will now fire automatically.");
+
+  ScriptApp.newTrigger("onFormSubmit_NoAccount")
+    .forForm(FormApp.openById(FORM_NO_ACCOUNT_ID))
+    .onFormSubmit()
+    .create();
+
+  Logger.log("Both triggers installed.");
 }
 
-function onFormSubmit(e) {
-  const row = e.values;
+function normalizeColorScheme(raw) {
+  raw = (raw || "").toLowerCase();
+  return raw.indexOf("sage") > -1 ? "sage_forest" : "wine_gold";
+}
 
-  const colorSchemeRaw = row[COLUMNS.COLOR_SCHEME] || "";
-  const colorScheme = colorSchemeRaw.toLowerCase().includes("sage")
-    ? "sage_forest"
-    : "wine_gold";
+/** Fetches the uploaded file's bytes and base64-encodes them, given the
+ * value Google Forms puts in a File Upload response (a Drive file ID). */
+function fetchPhotoAsBase64(fileId) {
+  if (!fileId) return null;
+  try {
+    const file = DriveApp.getFileById(fileId);
+    return {
+      photo_base64: Utilities.base64Encode(file.getBlob().getBytes()),
+      photo_filename: file.getName(),
+    };
+  } catch (err) {
+    Logger.log("Could not fetch uploaded photo (" + fileId + "): " + err);
+    return null;
+  }
+}
 
-  const payload = {
-    name: row[COLUMNS.NAME],
-    email: row[COLUMNS.EMAIL],
-    phone: row[COLUMNS.PHONE],
-    shaklee_storefront_handle: row[COLUMNS.SHAKLEE_HANDLE],
-    color_scheme: colorScheme,
-    photo_drive_url: row[COLUMNS.PHOTO_URL] || null,
-    bio: row[COLUMNS.BIO] || null,
-    submitted_at: row[COLUMNS.TIMESTAMP],
-  };
-
+function sendToWebhook(payload, sheet, rowNum) {
   const options = {
     method: "post",
     contentType: "application/json",
@@ -68,17 +78,65 @@ function onFormSubmit(e) {
   const response = UrlFetchApp.fetch(WEBHOOK_URL, options);
   const status = response.getResponseCode();
 
-  // Write a status column back onto the row so you can see it worked
-  // without leaving the Sheet. Column I = index 8.
-  const sheet = e.range.getSheet();
-  const rowNum = e.range.getRow();
   if (status === 200) {
     const result = JSON.parse(response.getContentText());
     sheet.getRange(rowNum, 9).setValue("Onboarded \u2713");
     sheet.getRange(rowNum, 10).setValue(result.live_url || "");
     sheet.getRange(rowNum, 11).setValue(result.qa_status || "");
+    sheet.getRange(rowNum, 12).setValue(result.ai_review_status || "");
   } else {
     sheet.getRange(rowNum, 9).setValue("FAILED - check webhook logs");
     sheet.getRange(rowNum, 10).setValue("HTTP " + status);
   }
+}
+
+/** Form A: has the photo option and the "Business card style" question. */
+function onFormSubmit_WithPhoto(e) {
+  const v = e.namedValues;
+
+  const cardStyle = (v["Business card style"] || [""])[0];
+  const noPhoto = cardStyle.indexOf("No-photo") > -1;
+
+  const payload = {
+    name: (v["Full name"] || [""])[0],
+    email: (v["Email address"] || [""])[0],
+    phone: (v["Phone number"] || [""])[0],
+    shaklee_storefront_handle: (v["Shaklee storefront handle"] || [""])[0],
+    color_scheme: normalizeColorScheme((v["Color scheme for business cards"] || [""])[0]),
+    bio: (v["Short personal note"] || [""])[0] || null,
+    no_photo: noPhoto,
+  };
+
+  if (!noPhoto) {
+    // Google Forms records an uploaded file's Drive ID in the response value.
+    const fileId = (v["Headshot photo"] || [""])[0];
+    const photo = fetchPhotoAsBase64(fileId);
+    if (photo) {
+      payload.photo_base64 = photo.photo_base64;
+      payload.photo_filename = photo.photo_filename;
+    }
+  }
+
+  const sheet = e.range.getSheet();
+  const rowNum = e.range.getRow();
+  sendToWebhook(payload, sheet, rowNum);
+}
+
+/** Form B: no Google account, no file upload, always the no-photo layout. */
+function onFormSubmit_NoAccount(e) {
+  const v = e.namedValues;
+
+  const payload = {
+    name: (v["Full name"] || [""])[0],
+    email: (v["Email address"] || [""])[0],
+    phone: (v["Phone number"] || [""])[0],
+    shaklee_storefront_handle: (v["Shaklee storefront handle"] || [""])[0],
+    color_scheme: normalizeColorScheme((v["Color scheme for business cards"] || [""])[0]),
+    bio: (v["Short personal note"] || [""])[0] || null,
+    no_photo: true,
+  };
+
+  const sheet = e.range.getSheet();
+  const rowNum = e.range.getRow();
+  sendToWebhook(payload, sheet, rowNum);
 }

@@ -122,20 +122,33 @@ def onboard(leader, pipeline_root, out_dir):
 
     # ---------- 3. Business card ----------
     print("[3/4] Business card...")
-    if leader.get("photo_path"):
-        card_dir = os.path.join(pipeline_root, "card-template", "Leader-Card-Template")
-        card_prefix = os.path.join(out_dir, f"{uname}_Card")
-        photo_abs = os.path.abspath(leader["photo_path"])
-        website_display = "Scan to visit my page"
-        landing_url = f"https://bobfairfield.github.io/{repo_slug}/"
-        run([
-            "python3", "generate_leader_card.py", name, leader["phone"], leader["email"],
-            website_display, landing_url, photo_abs, leader["color_scheme"], card_prefix,
-        ], cwd=card_dir)
-        report["steps"].append({"deliverable": "business_card", "file": f"{card_prefix}_front.pdf / _back.pdf", "status": "generated"})
+    card_dir = os.path.join(pipeline_root, "card-template", "Leader-Card-Template")
+    card_prefix = os.path.join(out_dir, f"{uname}_Card")
+    landing_url = f"https://bobfairfield.github.io/{repo_slug}/"
+    brand_suffix = leader.get("brand_suffix") or "Longevity"
+    no_photo = bool(leader.get("no_photo")) or not leader.get("photo_path")
+
+    cmd = [
+        "python3", "generate_card.py", name, brand_suffix, leader["email"], leader["phone"],
+        landing_url,
+    ]
+    if no_photo:
+        cmd += ["none", leader["color_scheme"].replace("_gold", "").replace("_forest", ""), card_prefix, "--no-photo"]
     else:
-        report["steps"].append({"deliverable": "business_card", "file": None, "status": "skipped_no_photo"})
-        report["warnings"].append("No photo provided - business card skipped. Needs manual follow-up once she sends a headshot.")
+        photo_abs = os.path.abspath(leader["photo_path"])
+        cmd += [photo_abs, leader["color_scheme"].replace("_gold", "").replace("_forest", ""), card_prefix]
+    run(cmd, cwd=card_dir)
+
+    report["steps"].append({
+        "deliverable": "business_card",
+        "file": f"{card_prefix}_front.pdf / _back.pdf",
+        "status": "generated_no_photo" if no_photo else "generated",
+    })
+    if no_photo:
+        report["warnings"].append(
+            "No photo provided - card generated using the no-photo layout "
+            "(full-bleed panel with VIVIX+ watermark, no headshot needed)."
+        )
 
     # ---------- 4. Landing page ----------
     print("[4/4] Landing page...")

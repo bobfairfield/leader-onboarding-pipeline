@@ -51,17 +51,28 @@ def _extract_json(text):
 def _review_card(leader, out_dir, api_key, results):
     matches = glob.glob(os.path.join(out_dir, "*_front_preview.png"))
     if not matches:
-        # No photo was provided, card was intentionally skipped - nothing to review.
-        results.append(("card_image", "SKIP", "No card generated (no photo on file)"))
+        results.append(("card_image", "FAIL", "No card preview found - card generation may have failed"))
         return
     with open(matches[0], "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
 
+    no_photo = bool(leader.get("no_photo")) or not leader.get("photo_path")
+    if no_photo:
+        photo_check = (
+            "This card intentionally uses the no-photo layout (full-bleed color panel "
+            "with a large translucent VIVIX+ watermark instead of a headshot) - that is "
+            "correct and expected, not a defect. Do not flag the absence of a photo."
+        )
+    else:
+        photo_check = (
+            "The photo should not be obviously cropped badly (face cut off, stretched, "
+            "or upside down)."
+        )
+
     prompt = (
         f"This is a generated business card front for {leader['name']}. "
-        "Check for: the name is fully legible and not cut off or overlapping "
-        "other text, the photo is not obviously cropped badly (face cut off, "
-        "stretched, or upside down), and there's no visible rendering defect "
+        f"Check for: the name is fully legible and not cut off or overlapping "
+        f"other text. {photo_check} There should be no visible rendering defect "
         "(garbled text, missing letters, color bleeding onto text). "
         "Respond with ONLY a JSON object: "
         '{"pass": true or false, "issues": ["short description", ...]} '
