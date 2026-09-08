@@ -93,6 +93,22 @@ function fetchPhotoAsBase64(fileId) {
   }
 }
 
+/** Finds a column by its header text in row 1, creating it at the end of
+ * the sheet if it doesn't exist yet. Safer than a fixed column number,
+ * since a File Upload question can generate more than one real column of
+ * its own - a fixed position can land on top of genuine form data instead
+ * of safely past it. */
+function getOrCreateColumn(sheet, headerName) {
+  const lastCol = sheet.getLastColumn();
+  const headerRow = sheet.getRange(1, 1, 1, Math.max(lastCol, 1)).getValues()[0];
+  const existingIndex = headerRow.indexOf(headerName);
+  if (existingIndex > -1) return existingIndex + 1; // 1-indexed
+
+  const newCol = lastCol + 1;
+  sheet.getRange(1, newCol).setValue(headerName);
+  return newCol;
+}
+
 function sendToWebhook(payload, sheet, rowNum) {
   const options = {
     method: "post",
@@ -105,18 +121,24 @@ function sendToWebhook(payload, sheet, rowNum) {
   const response = UrlFetchApp.fetch(WEBHOOK_URL, options);
   const status = response.getResponseCode();
 
+  const statusCol = getOrCreateColumn(sheet, "Pipeline Status");
+  const urlCol = getOrCreateColumn(sheet, "Live URL");
+  const qaCol = getOrCreateColumn(sheet, "QA Status");
+  const aiCol = getOrCreateColumn(sheet, "AI Review Status");
+  const folderCol = getOrCreateColumn(sheet, "Deliverables Folder");
+
   if (status === 200) {
     const result = JSON.parse(response.getContentText());
     const folderUrl = saveDeliverablesToDrive(payload.name, result.files_base64);
 
-    sheet.getRange(rowNum, 9).setValue("Onboarded \u2713");
-    sheet.getRange(rowNum, 10).setValue(result.live_url || "");
-    sheet.getRange(rowNum, 11).setValue(result.qa_status || "");
-    sheet.getRange(rowNum, 12).setValue(result.ai_review_status || "");
-    sheet.getRange(rowNum, 13).setValue(folderUrl);
+    sheet.getRange(rowNum, statusCol).setValue("Onboarded \u2713");
+    sheet.getRange(rowNum, urlCol).setValue(result.live_url || "");
+    sheet.getRange(rowNum, qaCol).setValue(result.qa_status || "");
+    sheet.getRange(rowNum, aiCol).setValue(result.ai_review_status || "");
+    sheet.getRange(rowNum, folderCol).setValue(folderUrl);
   } else {
-    sheet.getRange(rowNum, 9).setValue("FAILED - check webhook logs");
-    sheet.getRange(rowNum, 10).setValue("HTTP " + status);
+    sheet.getRange(rowNum, statusCol).setValue("FAILED - check webhook logs");
+    sheet.getRange(rowNum, urlCol).setValue("HTTP " + status);
   }
 }
 
