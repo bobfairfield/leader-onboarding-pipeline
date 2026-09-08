@@ -2,8 +2,14 @@ const WEBHOOK_URL = "https://leader-onboarding-pipeline.vercel.app/api/onboard";
 const WEBHOOK_SECRET = "E0K8pVj7j8w5oZpA97pNrSdoiv14nRjy"; // keep whatever you already had set
 const DELIVERABLES_FOLDER_ID = "1IFShUARasyGL21FAALhfXr9inbirO-5H";
 
-const FORM_WITH_PHOTO_ID = "1OcsZTE2epS8Iwxz7JEZ0kMrixU30xVJHkCMA99ZxLkk";
-const FORM_NO_ACCOUNT_ID = "10RodpCslCDyt43SbgtlOg5Yx-RiVoyw78GYRyThqsnk";
+// IMPORTANT: triggers must be bound to each form's response SPREADSHEET,
+// not the Form itself. A .forForm() trigger's event object has no
+// .namedValues / .range at all - those only exist on .forSpreadsheet()
+// triggers. That mismatch was the actual bug: every submission was
+// crashing instantly with "Cannot read properties of undefined" the
+// moment the code tried to read e.namedValues[...].
+const SHEET_WITH_PHOTO_ID = "1yAQZLm1Rx0qShNwIH3hNuNqrWhL_G0BbvzZSwPfJAkg";
+const SHEET_NO_ACCOUNT_ID = "1BmYhmeVu2LuosBcVgqrSh43-Yxts_0ppXfy8yYypoTc";
 
 function installTriggers() {
   // Remove any old triggers with these handler names first so re-running is safe.
@@ -15,12 +21,12 @@ function installTriggers() {
   });
 
   ScriptApp.newTrigger("onFormSubmit_WithPhoto")
-    .forForm(FormApp.openById(FORM_WITH_PHOTO_ID))
+    .forSpreadsheet(SpreadsheetApp.openById(SHEET_WITH_PHOTO_ID))
     .onFormSubmit()
     .create();
 
   ScriptApp.newTrigger("onFormSubmit_NoAccount")
-    .forForm(FormApp.openById(FORM_NO_ACCOUNT_ID))
+    .forSpreadsheet(SpreadsheetApp.openById(SHEET_NO_ACCOUNT_ID))
     .onFormSubmit()
     .create();
 
