@@ -680,7 +680,12 @@
   }
 
   /* ---------- 60-DAY STUDY STATS ---------- */
-  .study-stats{margin:32px 0 8px;}
+  .study-stats{
+    margin:32px 0 8px;
+    background:var(--sage-pale);
+    border-radius:20px;
+    padding:36px 28px 32px;
+  }
   .study-stats-head{margin-bottom:20px;}
   .study-stats-head .eyebrow{color:var(--sage-deep);display:block;margin-bottom:8px;}
   .study-stats-head h2{font-size:clamp(20px,2.6vw,26px);color:var(--wine-dark);}
@@ -718,6 +723,7 @@
   }
   @media (max-width:480px){
     .study-stats-grid{grid-template-columns:1fr;}
+    .study-stats{padding:28px 18px 26px;}
   }
 
   .full-story-link{
