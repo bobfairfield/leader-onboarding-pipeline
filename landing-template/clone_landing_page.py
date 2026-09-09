@@ -22,6 +22,11 @@ leader.json fields (all required unless marked optional):
                     If either is omitted, the email-capture section is
                     left as a placeholder comment for the leader to
                     self-serve or send to Bob later.
+    ambassador_booking_link
+                    optional; the leader's own Google Calendar
+                    Appointment Schedule link (or any booking link).
+                    Falls back to Bob's own Calendly if omitted, so the
+                    Ambassador CTA always points somewhere real.
 
 Never edit bob_master.html directly - this script reads it fresh every
 time so the master stays clean for the next leader.
@@ -57,6 +62,14 @@ def swap_simple_fields(html, leader):
 
     # Shaklee affiliate path
     html = html.replace("en_US/ferguson", leader["shaklee_path"])
+
+    # Ambassador booking link - falls back to Bob's own Calendly if the
+    # leader hasn't set up their own Google Calendar Appointment Schedule
+    # yet, so the CTA always points somewhere real rather than breaking.
+    html = html.replace(
+        "https://calendly.com/bobfergusonwellness/15min",
+        leader.get("ambassador_booking_link") or "https://calendly.com/bobfergusonwellness/15min",
+    )
 
     return html
 

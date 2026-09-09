@@ -102,6 +102,7 @@ def process_onboarding(payload):
             "bio": payload.get("bio"),
             "no_photo": payload.get("no_photo", not bool(photo_path)),
             "brand_suffix": payload.get("brand_suffix", "Longevity"),
+            "ambassador_booking_link": payload.get("ambassador_booking_link"),
         }
         leader["repo_slug"] = slugify(leader["name"])
 
