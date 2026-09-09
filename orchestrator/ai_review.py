@@ -22,6 +22,7 @@ import glob
 import base64
 import re
 import urllib.request
+import urllib.error
 
 API_URL = "https://api.anthropic.com/v1/messages"
 MODEL = "claude-sonnet-5"
@@ -37,8 +38,15 @@ def _call_claude(messages, api_key, max_tokens=500):
     req.add_header("x-api-key", api_key)
     req.add_header("anthropic-version", "2023-06-01")
     req.add_header("content-type", "application/json")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # str(e) alone is just "HTTP Error 400: Bad Request" - throws away
+        # the actual explanation Anthropic puts in the response body, which
+        # is the only way to know what's actually wrong.
+        detail = e.read().decode(errors="replace")
+        raise RuntimeError(f"HTTP {e.code} from Anthropic API: {detail}") from e
 
 
 def _extract_json(text):
