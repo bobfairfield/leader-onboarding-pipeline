@@ -24,9 +24,11 @@ leader.json fields (all required unless marked optional):
                     self-serve or send to Bob later.
     ambassador_booking_link
                     optional; the leader's own Google Calendar
-                    Appointment Schedule link (or any booking link).
-                    Falls back to Bob's own Calendly if omitted, so the
-                    Ambassador CTA always points somewhere real.
+                    Appointment Schedule link (or any booking link). If
+                    omitted, the Ambassador CTA falls back to a mailto
+                    pointing at the leader's own email - never to Bob's
+                    calendar, which would otherwise quietly route her
+                    prospects to him instead.
 
 Never edit bob_master.html directly - this script reads it fresh every
 time so the master stays clean for the next leader.
@@ -63,12 +65,24 @@ def swap_simple_fields(html, leader):
     # Shaklee affiliate path
     html = html.replace("en_US/ferguson", leader["shaklee_path"])
 
-    # Ambassador booking link - falls back to Bob's own Calendly if the
-    # leader hasn't set up their own Google Calendar Appointment Schedule
-    # yet, so the CTA always points somewhere real rather than breaking.
+    # Ambassador CTA - a real booking link if the leader has set one up,
+    # otherwise a mailto to the LEADER's own email (never a fallback to
+    # Bob's calendar, which would quietly route her prospects to him).
+    booking_link = leader.get("ambassador_booking_link")
+    if booking_link:
+        ambassador_cta = (
+            f'<a href="{booking_link}" target="_blank" rel="noopener">'
+            f'Check out as an ambassador and click here to set a time for us to talk &rarr;</a>'
+        )
+    else:
+        ambassador_cta = (
+            f'<a href="mailto:{leader["email"]}?subject=Interested%20in%20becoming%20an%20Ambassador">'
+            f'Check out as an ambassador and click here to email me so we can set a time to talk &rarr;</a>'
+        )
     html = html.replace(
-        "https://calendly.com/bobfergusonwellness/15min",
-        leader.get("ambassador_booking_link") or "https://calendly.com/bobfergusonwellness/15min",
+        '<a href="https://calendly.com/bobfergusonwellness/15min" target="_blank" rel="noopener">'
+        'Check out as an ambassador and click here to set a time for us to talk &rarr;</a>',
+        ambassador_cta,
     )
 
     return html
