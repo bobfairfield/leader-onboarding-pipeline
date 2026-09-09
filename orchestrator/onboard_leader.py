@@ -26,7 +26,9 @@ REQUIRED_FIELDS = ["name", "email", "phone", "shaklee_storefront_handle", "color
 
 
 def slugify(name):
-    return name.lower().replace(".", "").replace("'", "").strip().replace(" ", "-") + "-landing"
+    cleaned = re.sub(r"[^a-zA-Z0-9\s-]", "", name)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned.lower().replace(" ", "-") + "-landing"
 
 
 def underscore(name):
