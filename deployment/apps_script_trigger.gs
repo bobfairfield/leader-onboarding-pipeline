@@ -219,6 +219,7 @@ function onFormSubmit_WithPhoto(e) {
     bio: get("Short personal note"),
     submitted_at: get("Timestamp"),
     no_photo: noPhotoChosen || !(photoInfo && !photoTooLarge),
+    ambassador_booking_link: get("Google Calendar booking link (optional)"),
     _photoTooLarge: !!photoTooLarge,
     _photoTooLargeSizeMB: photoTooLarge ? photoInfo.sizeMB : null,
   };
@@ -242,6 +243,7 @@ function onFormSubmit_NoAccount(e) {
     bio: get("Short personal note"),
     submitted_at: get("Timestamp"),
     no_photo: true,
+    ambassador_booking_link: get("Google Calendar booking link (optional)"),
     _photoTooLarge: false,
     _photoTooLargeSizeMB: null,
   };
