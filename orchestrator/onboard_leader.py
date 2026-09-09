@@ -55,7 +55,18 @@ def clean_shaklee_handle(raw):
 
 def run(cmd, cwd=None):
     print(f"  $ {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    # Vercel adds this project's installed dependencies to sys.path for the
+    # main handler process at startup, but NOT via a real PYTHONPATH
+    # environment variable - it's done programmatically. A freshly spawned
+    # subprocess (even using sys.executable, the exact same interpreter
+    # binary) starts with a clean sys.path and can't see them, causing
+    # "ModuleNotFoundError: No module named 'PIL'" even though Pillow is
+    # correctly installed. Explicitly forwarding the parent's actual
+    # working sys.path fixes this without needing to refactor every script
+    # into an importable module.
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(sys.path)
+    result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
     if result.returncode != 0:
         print(result.stdout)
         print(result.stderr)
