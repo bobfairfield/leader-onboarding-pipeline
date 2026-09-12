@@ -73,8 +73,14 @@ def _review_card(leader, out_dir, api_key, results):
         )
     else:
         photo_check = (
-            "The photo should not be obviously cropped badly (face cut off, stretched, "
-            "or upside down)."
+            "Look closely at how the photo is cropped and composed, not just whether "
+            "it's technically intact. Flag it if: the face is cut off, stretched, or "
+            "upside down; the crop is so tight that there's little to no headroom above "
+            "the head or the top of the head itself is cut off; the framing looks "
+            "awkward or unflattering (e.g. an extreme close-up filling the whole frame, "
+            "an odd angle, most of the face out of frame). A well-composed headshot "
+            "should show the face clearly with some natural breathing room around it, "
+            "similar to a normal portrait photo, not a tight, cropped-in closeup."
         )
 
     prompt = (
