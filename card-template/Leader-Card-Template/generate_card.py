@@ -126,12 +126,24 @@ def crop_fit_photo(photo_path, target_w, target_h, bw=False):
     aspect = target_w / target_h
     src_aspect = w / h
     if src_aspect > aspect:
+        # Cropping width down to fit - faces are usually roughly centered
+        # left-to-right in a headshot, so a plain center crop is fine here.
         crop_w = int(h * aspect)
         x0 = (w - crop_w) // 2
         im = im.crop((x0, 0, x0 + crop_w, h))
     else:
+        # Cropping height down to fit. A plain center crop here is what was
+        # producing awkward results: a typical headshot has the face in the
+        # upper half with room below for shoulders/chest, so centering the
+        # crop vertically tends to cut across the top of the head while
+        # keeping a lot of empty space below. Biasing the crop toward the
+        # top keeps the face and some headroom intact and trims from the
+        # bottom instead, which matches how these photos are usually framed.
+        # This is a heuristic, not real face detection - it won't fix a
+        # source photo where the face itself is off-center or already
+        # tightly cropped, but it corrects the common case.
         crop_h = int(w / aspect)
-        y0 = (h - crop_h) // 2
+        y0 = int((h - crop_h) * 0.15)
         im = im.crop((0, y0, w, y0 + crop_h))
     return im.resize((target_w, target_h), Image.LANCZOS)
 
