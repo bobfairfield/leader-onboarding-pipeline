@@ -100,7 +100,6 @@ def swap_about_section(html, leader):
             b64 = base64.b64encode(f.read()).decode()
         ext = os.path.splitext(leader["photo_path"])[1].lstrip(".").lower()
         ext = "jpeg" if ext in ("jpg", "jpeg") else ext
-        first_name = leader["name"].split()[0]
         bio = leader.get("bio") or (
             f"I share the same routine and research you just read about "
             f"because it's made a real difference in my own life, and I "
@@ -114,7 +113,7 @@ def swap_about_section(html, leader):
     <div class="about-leader-inner">
       <img class="about-leader-photo" src="data:image/{ext};base64,{b64}" alt="{leader['name']}">
       <div class="about-leader-text">
-        <p><strong>Hi, I'm {first_name}.</strong> {bio}</p>
+        <p><strong>Meet {leader['name']}.</strong> {bio}</p>
       </div>
     </div>
   </div>
