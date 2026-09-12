@@ -118,7 +118,7 @@ def _review_copy(leader, out_dir, api_key, results):
     with open(matches[0]) as f:
         html = f.read()
 
-    bio_match = re.search(r"<p><strong>Hi, I'm [^<]+\.</strong>(.*?)</p>", html, re.DOTALL)
+    bio_match = re.search(r'<div class="about-leader-text">\s*<p>(.*?)</p>', html, re.DOTALL)
     if not bio_match:
         results.append(("landing_copy", "FAIL", "Photo was provided but no About section found on the page - personalization may have failed"))
         return
